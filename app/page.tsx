@@ -4,7 +4,6 @@ import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, CloudRain, MapPin, ShieldCheck } from "lucide-react";
-import { demoReports } from "@/lib/demo-data";
 import { supabase } from "@/lib/supabase";
 import type { FloodReport, FloodStatus } from "@/lib/types";
 import { StatusBadge } from "@/components/status-badge";
@@ -17,13 +16,22 @@ const FloodMap = dynamic(() => import("@/components/flood-map"), {
 const statusOrder: FloodStatus[] = ["flooded", "water_rising", "clear"];
 
 export default function HomePage() {
-  const [reports, setReports] = useState<FloodReport[]>(demoReports);
-  const [usingDemo, setUsingDemo] = useState(true);
+  const [reports, setReports] = useState<FloodReport[]>([]);
   const [query, setQuery] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [loadMessage, setLoadMessage] = useState<string | null>(null);
 
   useEffect(() => {
     async function loadReports() {
-      if (!supabase) return;
+      setLoading(true);
+      setLoadMessage(null);
+
+      if (!supabase) {
+        setReports([]);
+        setLoadMessage("Supabase is not connected. Add your Supabase URL and anon key in Vercel environment variables.");
+        setLoading(false);
+        return;
+      }
 
       const { data, error } = await supabase
         .from("flood_reports")
@@ -31,10 +39,14 @@ export default function HomePage() {
         .order("created_at", { ascending: false })
         .limit(100);
 
-      if (!error && data && data.length > 0) {
-        setReports(data as FloodReport[]);
-        setUsingDemo(false);
+      if (error) {
+        setReports([]);
+        setLoadMessage(error.message);
+      } else {
+        setReports((data || []) as FloodReport[]);
       }
+
+      setLoading(false);
     }
 
     loadReports();
@@ -86,7 +98,7 @@ export default function HomePage() {
               <div>
                 <h2 className="font-black">Important safety note</h2>
                 <p className="mt-2 text-sm leading-6 text-slate-300">
-                  This MVP should not be treated as perfect truth. Reports can be incomplete. Official alerts and local instructions should still be followed.
+                  Flood reports can be incomplete or change quickly. Follow official alerts and local emergency instructions before travelling.
                 </p>
               </div>
             </div>
@@ -111,9 +123,19 @@ export default function HomePage() {
         <section className="mt-6 grid gap-6 lg:grid-cols-[1fr_360px]">
           <div>
             <FloodMap reports={filteredReports} />
-            {usingDemo ? (
+            {loading ? (
+              <p className="mt-3 rounded-2xl bg-blue-50 px-4 py-3 text-sm font-semibold text-blue-700">
+                Loading live flood reports...
+              </p>
+            ) : null}
+            {!loading && loadMessage ? (
               <p className="mt-3 rounded-2xl bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-700">
-                Demo data is showing because Supabase has no live reports yet.
+                {loadMessage}
+              </p>
+            ) : null}
+            {!loading && !loadMessage && reports.length === 0 ? (
+              <p className="mt-3 rounded-2xl bg-white px-4 py-3 text-sm font-semibold text-slate-600 shadow-sm ring-1 ring-slate-200">
+                No live flood reports have been submitted yet.
               </p>
             ) : null}
           </div>
@@ -147,6 +169,12 @@ export default function HomePage() {
                   </div>
                 </Link>
               ))}
+
+              {!loading && filteredReports.length === 0 ? (
+                <p className="rounded-2xl bg-slate-50 px-4 py-6 text-center text-sm font-semibold text-slate-500">
+                  No matching live reports found.
+                </p>
+              ) : null}
             </div>
           </aside>
         </section>
