@@ -3,23 +3,25 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { ArrowLeft } from "lucide-react";
-import { demoReports } from "@/lib/demo-data";
 import { supabase } from "@/lib/supabase";
 import type { FloodReport } from "@/lib/types";
 import { StatusBadge } from "@/components/status-badge";
 
-function slugify(value: string) {
-  return value.toLowerCase().replaceAll(" ", "-");
-}
-
 export default function AreaPage({ params }: { params: { slug: string } }) {
   const [reports, setReports] = useState<FloodReport[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadMessage, setLoadMessage] = useState<string | null>(null);
   const areaName = useMemo(() => decodeURIComponent(params.slug).replaceAll("-", " "), [params.slug]);
 
   useEffect(() => {
     async function loadAreaReports() {
+      setLoading(true);
+      setLoadMessage(null);
+
       if (!supabase) {
-        setReports(demoReports.filter((report) => slugify(report.area_name) === params.slug));
+        setReports([]);
+        setLoadMessage("Supabase is not connected. Add your Supabase URL and anon key in Vercel environment variables.");
+        setLoading(false);
         return;
       }
 
@@ -29,11 +31,18 @@ export default function AreaPage({ params }: { params: { slug: string } }) {
         .ilike("area_name", areaName)
         .order("created_at", { ascending: false });
 
-      if (!error && data) setReports(data as FloodReport[]);
+      if (error) {
+        setReports([]);
+        setLoadMessage(error.message);
+      } else {
+        setReports((data || []) as FloodReport[]);
+      }
+
+      setLoading(false);
     }
 
     loadAreaReports();
-  }, [areaName, params.slug]);
+  }, [areaName]);
 
   return (
     <main className="min-h-screen bg-slate-100 px-4 py-6 md:px-8">
@@ -51,6 +60,18 @@ export default function AreaPage({ params }: { params: { slug: string } }) {
         </header>
 
         <div className="mt-6 space-y-4">
+          {loading ? (
+            <p className="rounded-[24px] bg-blue-50 p-5 text-sm font-semibold text-blue-700 shadow-sm ring-1 ring-blue-100">
+              Loading live reports for this area...
+            </p>
+          ) : null}
+
+          {!loading && loadMessage ? (
+            <p className="rounded-[24px] bg-amber-50 p-5 text-sm font-semibold text-amber-700 shadow-sm ring-1 ring-amber-100">
+              {loadMessage}
+            </p>
+          ) : null}
+
           {reports.map((report) => (
             <article key={report.id} className="rounded-[24px] bg-white p-5 shadow-soft ring-1 ring-slate-200">
               <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
@@ -71,9 +92,9 @@ export default function AreaPage({ params }: { params: { slug: string } }) {
             </article>
           ))}
 
-          {reports.length === 0 ? (
+          {!loading && !loadMessage && reports.length === 0 ? (
             <div className="rounded-[24px] bg-white p-10 text-center shadow-soft ring-1 ring-slate-200">
-              <h2 className="text-xl font-black text-slate-950">No reports for this area yet</h2>
+              <h2 className="text-xl font-black text-slate-950">No live reports for this area yet</h2>
               <p className="mt-2 text-sm text-slate-600">Submit one if you are there and can safely confirm the condition.</p>
               <Link href="/report" className="mt-5 inline-flex rounded-2xl bg-blue-600 px-5 py-3 font-black text-white hover:bg-blue-700">
                 Report this area
